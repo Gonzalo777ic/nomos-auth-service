@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication; // Importación necesaria
 
 @RestController
 @RequestMapping("/api/auth")
@@ -37,17 +38,22 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(@RequestBody LoginRequest loginRequest) {
         try {
-            authenticationManager.authenticate(
+            // Paso 1: Autenticar y obtener el objeto Authentication
+            Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword())
             );
+
+            // Paso 2: Obtener los detalles del usuario, que ahora incluyen los roles
+            final UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+
+            // Paso 3: Generar el JWT con el username y las autoridades (roles)
+            final String jwt = jwtUtil.generateToken(userDetails.getUsername(), userDetails.getAuthorities());
+
+            return ResponseEntity.ok(jwt);
+
         } catch (AuthenticationException e) {
             // Maneja específicamente las excepciones de autenticación
             return ResponseEntity.badRequest().body("Invalid username or password");
         }
-
-        final UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getUsername());
-        final String jwt = jwtUtil.generateToken(userDetails.getUsername());
-
-        return ResponseEntity.ok(jwt);
     }
 }

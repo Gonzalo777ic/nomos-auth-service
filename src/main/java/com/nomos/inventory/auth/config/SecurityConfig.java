@@ -57,15 +57,20 @@ public class SecurityConfig {
     }
 
     /**
-     * Cadena de filtros de seguridad para endpoints protegidos.
-     * Esta cadena requiere autenticación para cualquier solicitud que no coincida con el filtro público.
+     * Cadena de filtros de seguridad para endpoints protegidos, ahora con autorización por roles.
      */
     @Bean
     public SecurityFilterChain protectedFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth
+                        // Nueva regla: Solo usuarios con ROLE_ADMIN pueden acceder a esta ruta.
+                        // Usamos hasAuthority porque el rol fue insertado como una autoridad SimpleGrantedAuthority.
+                        .requestMatchers("/api/test/admin").hasAuthority("ROLE_ADMIN")
+                        // El resto de peticiones requieren cualquier usuario autenticado (con o sin rol específico)
+                        .anyRequest().authenticated()
+                )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
