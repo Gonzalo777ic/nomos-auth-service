@@ -17,10 +17,15 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
-    private String username;
+    // Columna para el ID de Auth0 (el 'sub' del JWT)
+    @Column(unique = true)
+    private String auth0Id;
 
-    @Column(nullable = false)
+    @Column(unique = true, nullable = false)
+    private String username; // Este campo puede seguir siendo el email
+
+    // Hacemos que la contraseña sea opcional para usuarios de Auth0
+    @Column(nullable = true)
     private String password;
 
     @ManyToMany(fetch = FetchType.EAGER)
@@ -31,4 +36,3 @@ public class User {
     )
     private Set<Role> roles;
 }
-

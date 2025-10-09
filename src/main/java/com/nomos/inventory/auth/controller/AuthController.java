@@ -14,14 +14,19 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.security.core.Authentication; // Importación necesaria
+import org.springframework.security.core.Authentication;
+
+// IMPORTACIÓN FALTANTE
+import com.nomos.inventory.auth.service.UserServiceImpl;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final UserService userService;
+    // Se cambió de UserService a UserServiceImpl para acceder a findOrCreateAuth0User
+    // o deberías agregarlo a la interfaz UserService (ver abajo)
+    private final UserServiceImpl userService;
     private final AuthenticationManager authenticationManager;
     private final AuthUserDetailsService userDetailsService;
     private final JwtUtil jwtUtil;
@@ -56,4 +61,19 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Invalid username or password");
         }
     }
+
+    // El 'Auth0UserRequest' ahora debería ser resuelto gracias al nuevo archivo.
+    @PostMapping("/auth0-upsert")
+    public ResponseEntity<String> auth0UpsertUser(@RequestBody Auth0UserRequest auth0UserRequest) {
+        try {
+            // Lógica para encontrar o crear el usuario en la BD de la tienda
+            userService.findOrCreateAuth0User(auth0UserRequest.getAuth0Id(), auth0UserRequest.getEmail());
+            return ResponseEntity.ok("User upserted successfully in Nomos database.");
+        } catch (Exception e) {
+            // Manejar errores si el rol ROLE_CLIENT no existe, por ejemplo.
+            System.err.println("Error saving/updating Auth0 user in database: " + e.getMessage());
+            return ResponseEntity.internalServerError().body("Error processing user data: " + e.getMessage());
+        }
+    }
+
 }
