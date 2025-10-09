@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import jakarta.transaction.Transactional;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -21,9 +22,13 @@ public class UserServiceImpl implements UserService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
 
+    // Métodos existentes de la interfaz UserService
     @Override
     public User saveUser(User user) {
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        // Asegurar que la contraseña solo se encripte y guarde si no es un usuario Auth0
+        if (user.getPassword() != null) {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        }
         return userRepository.save(user);
     }
 
@@ -48,6 +53,38 @@ public class UserServiceImpl implements UserService {
         }
         roles.add(role);
         user.setRoles(roles);
-        userRepository.save(user); // Transactional handles this automatically, but explicitly calling save is good practice.
+        userRepository.save(user);
+    }
+
+    @Override
+    public Optional<Role> findByRoleName(String roleName) {
+        return roleRepository.findByName(roleName);
+    }
+
+    // Implementación del método findOrCreateAuth0User
+    @Override
+    public User findOrCreateAuth0User(String auth0Id, String email) {
+        // ... (Tu lógica existente aquí) ...
+        // 1. Intentar encontrar el usuario por su ID de Auth0
+        Optional<User> existingUser = userRepository.findByAuth0Id(auth0Id);
+
+        if (existingUser.isPresent()) {
+            return existingUser.get();
+        }
+
+        // 2. Si no existe, crear un nuevo usuario
+        User newUser = new User();
+        newUser.setAuth0Id(auth0Id);
+        newUser.setUsername(email);
+        newUser.setPassword(null);
+
+        // 3. Asignar el rol por defecto (Ahora el rol EXISTIRÁ)
+        Role clientRole = roleRepository.findByName("ROLE_CLIENT")
+                .orElseThrow(() -> new RuntimeException("Role ROLE_CLIENT not found in database."));
+
+        newUser.setRoles(Collections.singleton(clientRole));
+
+        // 4. Guardar el nuevo usuario en PostgreSQL
+        return userRepository.save(newUser);
     }
 }

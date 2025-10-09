@@ -9,4 +9,10 @@ public interface UserService {
     Optional<User> findByUsername(String username);
     Role saveRole(Role role);
     void addRoleToUser(String username, String roleName);
+
+    // Declaración del método de persistencia de Auth0
+    User findOrCreateAuth0User(String auth0Id, String email);
+
+    // NUEVO: Método para buscar roles por nombre (usado por DatabaseInitializer)
+    Optional<Role> findByRoleName(String roleName);
 }
