@@ -2,15 +2,18 @@ package com.nomos.inventory.auth.controller;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import java.util.Set; // 🛑 Importar Set
 
-/**
- * Data Transfer Object (DTO) para recibir los datos básicos del usuario
- * de Auth0 (sub y email) que serán usados para el "upsert" en PostgreSQL.
- */
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
 public class Auth0UserRequest {
-    private String auth0Id; // El 'sub' del usuario de Auth0
-    private String email;   // El correo electrónico (usado como username de la tienda)
-    private String name;    // Opcional: Nombre completo
+
+    private String auth0Id;
+    private String email;
+    // 🛑 NUEVO CAMPO: Necesario para diferenciar entre User y Client
+    private Set<String> roles;
 }

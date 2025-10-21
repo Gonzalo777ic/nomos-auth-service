@@ -67,7 +67,12 @@ public class AuthController {
     public ResponseEntity<String> auth0UpsertUser(@RequestBody Auth0UserRequest auth0UserRequest) {
         try {
             // Lógica para encontrar o crear el usuario en la BD de la tienda
-            userService.findOrCreateAuth0User(auth0UserRequest.getAuth0Id(), auth0UserRequest.getEmail());
+            // 🛑 AÑADIR EL TERCER ARGUMENTO: roles
+            userService.findOrCreateAuth0User(
+                    auth0UserRequest.getAuth0Id(),
+                    auth0UserRequest.getEmail(),
+                    auth0UserRequest.getRoles() // 🛑 EL TERCER ARGUMENTO AÑADIDO
+            );
             return ResponseEntity.ok("User upserted successfully in Nomos database.");
         } catch (Exception e) {
             // Manejar errores si el rol ROLE_CLIENT no existe, por ejemplo.
