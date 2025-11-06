@@ -7,11 +7,18 @@ import com.nomos.inventory.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import jakarta.transaction.Transactional;
+
+// 🏆 ¡CORRECCIÓN CLAVE! Usar la anotación @Transactional de Spring
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import com.nomos.inventory.auth.repository.ClientRepository;
 import com.nomos.inventory.auth.model.Client;
 
@@ -25,10 +32,11 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final ClientRepository clientRepository;
 
-    // Métodos existentes de la interfaz UserService
+
+    // --- Métodos de Gestión de Usuarios y Roles ---
+
     @Override
     public User saveUser(User user) {
-        // Asegurar que la contraseña solo se encripte y guarde si no es un usuario Auth0
         if (user.getPassword() != null) {
             user.setPassword(passwordEncoder.encode(user.getPassword()));
         }
@@ -64,66 +72,170 @@ public class UserServiceImpl implements UserService {
         return roleRepository.findByName(roleName);
     }
 
-    // Implementación del método findOrCreateAuth0User
     @Override
-    public User findOrCreateAuth0User(String auth0Id, String email, Set<String> roles) { // 🛑 Modificado
+    public List<User> findUsersByRoleName(String roleName) {
+        Optional<Role> roleOptional = findByRoleName(roleName);
+        if (roleOptional.isPresent()) {
+            Role role = roleOptional.get();
+            return userRepository.findByRolesContaining(role);
+        }
+        return Collections.emptyList();
+    }
 
-        // 1. Determinar el TIPO DE USUARIO basándose en los roles del token
-        boolean isClient = roles.contains("ROLE_CLIENT");
+    @Override
+    public List<User> findAllInternalUsers() {
+        Optional<Role> clientRoleOptional = findByRoleName("ROLE_CLIENT");
+        if (clientRoleOptional.isEmpty()) {
+            return userRepository.findAll();
+        }
+        final Role clientRole = clientRoleOptional.get();
+        List<User> allUsers = userRepository.findAll();
+        List<User> internalUsers = allUsers.stream()
+                .filter(user -> {
+                    Set<Role> roles = user.getRoles();
+                    if (roles == null || roles.isEmpty()) {
+                        return true;
+                    }
+                    return !(roles.size() == 1 && roles.contains(clientRole));
+                })
+                .collect(Collectors.toList());
 
-        if (isClient) {
-            // --- Lógica para CLIENTE (Tienda Web) ---
-            return handleClientProvisioning(auth0Id, email);
+        return internalUsers;
+    }
+
+    // --- Métodos de Provisioning JIT de Auth0 ---
+
+    @Override
+    @Transactional
+    public User findOrCreateAuth0User(String auth0Id, String email, Set<String> newRoleNamesFromAuth0) {
+
+        Optional<User> existingUser = userRepository.findByAuth0Id(auth0Id);
+        User user = null;
+
+        // Búsqueda Dual (Backfill)
+        if (existingUser.isEmpty()) {
+            Optional<User> existingUserByEmail = userRepository.findByUsername(email);
+            if (existingUserByEmail.isPresent()) {
+                user = existingUserByEmail.get();
+                user.setAuth0Id(auth0Id);
+                existingUser = Optional.of(user);
+            }
+        }
+
+        // Si existe por Auth0Id, lo usamos
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+        }
+
+
+        Set<Role> newRoles = getRolesFromNames(newRoleNamesFromAuth0);
+
+        // Lógica: ¿Tiene roles internos?
+        boolean hasInternalRole = newRoleNamesFromAuth0.stream()
+                .anyMatch(roleName -> !roleName.equals("ROLE_CLIENT"));
+
+
+        if (hasInternalRole) {
+            // Caso TRABAJADOR: Debe existir en la tabla 'users'
+
+            if (user == null) {
+                // CREACIÓN INICIAL como trabajador
+                user = new User();
+                user.setAuth0Id(auth0Id);
+                user.setUsername(email);
+                user.setPassword(null);
+            }
+
+            // SINCRONIZACIÓN de Roles
+            if (user.getRoles() == null) {
+                user.setRoles(new HashSet<>());
+            }
+            user.getRoles().clear();
+            user.setRoles(newRoles);
+            user = userRepository.save(user);
+
+            // LIMPIEZA: Eliminamos de 'clients' si fue cliente antes
+            handleClientDemotion(auth0Id);
 
         } else {
-            // --- Lógica para PERSONAL INTERNO (Admin, Vendedor, Proveedor) ---
-            return handleUserProvisioning(auth0Id, email, roles);
+            // Caso CLIENTE PURO: No debe existir en 'users'
+
+            // PROVISIÓN: Garantizamos que exista en 'clients'.
+            handleClientProvisioning(auth0Id, email);
+
+            // DEMOCIÓN CRÍTICA: Eliminamos de 'users' si existía. (Llama a transacción separada)
+            handleUserDemotion(auth0Id);
+
+            // Si es cliente puro, devolvemos null ya que no está en la tabla 'users'
+            user = null;
+        }
+
+        return user;
+    }
+
+    // El @Transactional de Spring ahora permite usar Propagation
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void handleUserDemotion(String auth0Id) {
+        System.out.println("🚨 Ejecutando handleUserDemotion en NUEVA transacción para Auth0 ID: " + auth0Id);
+
+        Optional<User> existingUser = userRepository.findByAuth0Id(auth0Id);
+        if (existingUser.isPresent()) {
+            User user = existingUser.get();
+            userRepository.delete(user);
+            System.out.println("✅ Trabajador " + auth0Id + " democionado a cliente. Eliminada la entrada de la tabla users.");
+        } else {
+            System.out.println("ℹ️ Usuario Auth0 " + auth0Id + " no encontrado en la tabla users. No se requiere democión.");
         }
     }
 
-    // 🛑 NUEVO: Método para el Provisioning de CLIENTES
-    private User handleClientProvisioning(String auth0Id, String email) {
-        // 1. Intentar encontrar el cliente por su ID de Auth0
+
+    @Transactional
+    public void handleClientDemotion(String auth0Id) {
+        Optional<Client> existingClient = clientRepository.findByAuth0Id(auth0Id);
+        if (existingClient.isPresent()) {
+            Client client = existingClient.get();
+            clientRepository.delete(client);
+            System.out.println("Cliente " + auth0Id + " promovido a trabajador. Eliminada la entrada de la tabla clients.");
+        }
+    }
+
+    private Set<Role> getRolesFromNames(Set<String> roleNames) {
+        return roleNames.stream()
+                .map(roleName -> findByRoleName(roleName).orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
+    public User handleClientProvisioning(String auth0Id, String email) {
         Optional<Client> existingClient = clientRepository.findByAuth0Id(auth0Id);
 
         if (existingClient.isPresent()) {
-            // En un servicio real, aquí podrías devolver un objeto Client o una respuesta
-            // Para simplificar, devolvemos null o un placeholder.
-            // Pero el objetivo es que el CLIENTE EXISTA en su propia tabla.
-            // NOTA: Para este servicio de AUTENTICACIÓN, puedes devolver un User vacío o lanzar una excepción,
-            // ya que el front de Ventas/Tienda Web probablemente solo necesite saber que el JIT fue exitoso.
             System.out.println("Cliente ya existe en la BD. Provisioning JIT exitoso.");
-            return null; // O un User nulo/dummy si tu interfaz lo requiere
+            return null;
         }
 
-        // 2. Si no existe, crear un nuevo CLIENTE
         Client newClient = new Client();
         newClient.setAuth0Id(auth0Id);
         newClient.setEmail(email);
-        newClient.setFullName(email); // O parsear el nombre si viene en la petición
+        newClient.setFullName(email);
 
-        // 3. Guardar el nuevo cliente
         clientRepository.save(newClient);
         System.out.println("Nuevo Cliente creado en la BD. Provisioning JIT exitoso.");
-        return null; // O un User nulo/dummy
+        return null;
     }
 
-    // 🛑 NUEVO: Método para el Provisioning de PERSONAL (Trabajadores)
-    private User handleUserProvisioning(String auth0Id, String email, Set<String> roleNames) {
-        // 1. Intentar encontrar el usuario por su ID de Auth0
+    public User handleUserProvisioning(String auth0Id, String email, Set<String> roleNames) {
         Optional<User> existingUser = userRepository.findByAuth0Id(auth0Id);
 
         if (existingUser.isPresent()) {
             return existingUser.get();
         }
 
-        // 2. Si no existe, crear un nuevo USUARIO (Trabajador)
         User newUser = new User();
         newUser.setAuth0Id(auth0Id);
         newUser.setUsername(email);
         newUser.setPassword(null);
 
-        // 3. Asignar los roles (ej. ROLE_ADMIN, ROLE_VENDOR)
         Set<Role> roles = new HashSet<>();
         for (String roleName : roleNames) {
             roleRepository.findByName(roleName).ifPresent(roles::add);
@@ -134,8 +246,6 @@ public class UserServiceImpl implements UserService {
         }
 
         newUser.setRoles(roles);
-
-        // 4. Guardar el nuevo usuario
         return userRepository.save(newUser);
     }
 }
