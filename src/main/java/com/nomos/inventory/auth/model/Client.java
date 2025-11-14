@@ -1,5 +1,3 @@
-// src/main/java/com/nomos/inventory/auth/model/Client.java
-
 package com.nomos.inventory.auth.model;
 
 import jakarta.persistence.*;
@@ -16,20 +14,34 @@ public class Client {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id; // ID de negocio del cliente
+    private Long id;
 
-    // Columna para el ID de Auth0 (esencial para el JIT provisioning)
     @Column(unique = true, nullable = false)
     private String auth0Id;
 
     @Column(nullable = false)
-    private String email; // El email del cliente
+    private String email;
 
-    // Atributos específicos del cliente (ej. la tienda web los necesita)
-    @Column(name = "full_name")
+    @Column(name = "full_name", nullable = false)
     private String fullName;
 
-    // Puedes omitir los roles aquí, ya que el rol ROLE_CLIENT está implícito.
-    // Opcional: Atributos de negocio para la tienda (dirección, etc.)
-    // private String shippingAddress;
+    // --- Nuevos campos de facturación y contacto ---
+
+    // NOTA: Es String simple por ahora (ver punto 2)
+    @Column(name = "document_type", nullable = true)
+    private String documentType;
+
+    @Column(name = "document_number", nullable = true)
+    private String documentNumber;
+
+    @Column(name = "phone", nullable = true)
+    private String phone;
+
+    // La dirección puede ser nula si es una venta en tienda física
+    @Column(name = "address", nullable = true)
+    private String address;
+
+    // Si quieres un flag para indicar si el perfil está completo
+    // @Column(name = "is_profile_complete")
+    // private Boolean isProfileComplete = false;
 }
