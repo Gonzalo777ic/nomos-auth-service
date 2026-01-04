@@ -25,8 +25,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtRequestFilter.class);
 
-    // Ya no necesitamos AuthUserDetailsService porque leeremos los roles del JWT.
-    // private final AuthUserDetailsService userDetailsService;
+
     private final JwtUtil jwtUtil;
 
     @Override
@@ -43,38 +42,32 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             try {
                 username = jwtUtil.extractUsername(jwt);
             } catch (Exception e) {
-                // Capturar excepciones comunes de JWT (expiración, firma inválida)
+
                 log.warn("Error al parsear el token JWT: {}", e.getMessage());
-                // No se necesita hacer nada más, simplemente el usuario queda sin autenticar
+
             }
         }
 
-        // Si el username fue extraído y no hay autenticación actual en el contexto
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-            // 1. Validar la firma y expiración del token
             if (jwtUtil.validateToken(jwt, username)) {
 
-                // 2. Extraer roles del JWT (evitando la consulta a la base de datos)
                 List<String> roles = jwtUtil.extractRoles(jwt);
 
-                // Mapear los nombres de roles a objetos GrantedAuthority
                 List<GrantedAuthority> authorities = roles.stream()
                         .map(SimpleGrantedAuthority::new)
                         .collect(Collectors.toList());
 
                 log.debug("Token válido para usuario {}. Roles asignados al contexto: {}", username, authorities);
 
-                // 3. Crear el token de autenticación
-                // Usamos el constructor con authorities para la autorización
+
                 UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                        username, // Usamos solo el username como principal
-                        null,     // No se necesita la password
+                        username, 
+                        null,     
                         authorities);
 
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
-                // 4. Establecer el usuario autenticado en el contexto de seguridad
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
             } else {
                 log.debug("Token JWT inválido para el usuario {}", username);

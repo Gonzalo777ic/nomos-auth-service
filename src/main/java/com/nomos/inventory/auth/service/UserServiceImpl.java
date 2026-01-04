@@ -4,27 +4,22 @@ import com.nomos.inventory.auth.model.Role;
 import com.nomos.inventory.auth.model.User;
 import com.nomos.inventory.auth.repository.RoleRepository;
 import com.nomos.inventory.auth.repository.UserRepository;
+import com.nomos.inventory.auth.repository.ClientRepository;
+import com.nomos.inventory.auth.model.Client;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
-// 🏆 ¡CORRECCIÓN CLAVE! Usar la anotación @Transactional de Spring
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
-
-import com.nomos.inventory.auth.repository.ClientRepository;
-import com.nomos.inventory.auth.model.Client;
 
 @Service
 @Transactional
 @RequiredArgsConstructor
+@Slf4j 
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
@@ -32,12 +27,9 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final ClientRepository clientRepository;
 
-
-    // --- Métodos de Gestión de Usuarios y Roles ---
-
     @Override
     public User saveUser(User user) {
-        if (user.getPassword() != null) {
+        if (user.getPassword() != null && !user.getPassword().startsWith("$2a$")) {
             user.setPassword(passwordEncoder.encode(user.getPassword()));
         }
         return userRepository.save(user);
@@ -58,12 +50,10 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
         Role role = roleRepository.findByName(roleName).orElseThrow(() -> new RuntimeException("Role not found"));
 
-        Set<Role> roles = user.getRoles();
-        if (roles == null) {
-            roles = new HashSet<>();
+        if (user.getRoles() == null) {
+            user.setRoles(new HashSet<>());
         }
-        roles.add(role);
-        user.setRoles(roles);
+        user.getRoles().add(role);
         userRepository.save(user);
     }
 
@@ -74,178 +64,119 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<User> findUsersByRoleName(String roleName) {
-        Optional<Role> roleOptional = findByRoleName(roleName);
-        if (roleOptional.isPresent()) {
-            Role role = roleOptional.get();
-            return userRepository.findByRolesContaining(role);
-        }
-        return Collections.emptyList();
+        return roleRepository.findByName(roleName)
+                .map(userRepository::findByRolesContaining)
+                .orElse(Collections.emptyList());
     }
 
     @Override
     public List<User> findAllInternalUsers() {
-        Optional<Role> clientRoleOptional = findByRoleName("ROLE_CLIENT");
-        if (clientRoleOptional.isEmpty()) {
-            return userRepository.findAll();
-        }
-        final Role clientRole = clientRoleOptional.get();
+        Role clientRole = roleRepository.findByName("ROLE_CLIENT").orElse(null);
         List<User> allUsers = userRepository.findAll();
-        List<User> internalUsers = allUsers.stream()
+        if (clientRole == null) return allUsers;
+
+        return allUsers.stream()
                 .filter(user -> {
                     Set<Role> roles = user.getRoles();
-                    if (roles == null || roles.isEmpty()) {
-                        return true;
-                    }
+                    if (roles == null || roles.isEmpty()) return true;
                     return !(roles.size() == 1 && roles.contains(clientRole));
                 })
                 .collect(Collectors.toList());
-
-        return internalUsers;
     }
-
-    // --- Métodos de Provisioning JIT de Auth0 ---
+    @Override
+    @Transactional
+    public void updateSupplierId(Long userId, Long supplierId) {
+        userRepository.findById(userId).ifPresentOrElse(user -> {
+            log.info("Asignando proveedor ID {} al usuario {}", supplierId, user.getUsername());
+            user.setSupplierId(supplierId);
+            userRepository.save(user);
+        }, () -> {
+            throw new RuntimeException("No se pudo encontrar el usuario con ID: " + userId);
+        });
+    }
 
     @Override
     @Transactional
     public User findOrCreateAuth0User(String auth0Id, String email, Set<String> newRoleNamesFromAuth0) {
 
-        Optional<User> existingUser = userRepository.findByAuth0Id(auth0Id);
-        User user = null;
-
-        // Búsqueda Dual (Backfill)
-        if (existingUser.isEmpty()) {
-            Optional<User> existingUserByEmail = userRepository.findByUsername(email);
-            if (existingUserByEmail.isPresent()) {
-                user = existingUserByEmail.get();
-                user.setAuth0Id(auth0Id);
-                existingUser = Optional.of(user);
-            }
-        }
-
-        // Si existe por Auth0Id, lo usamos
-        if (existingUser.isPresent()) {
-            user = existingUser.get();
-        }
-
+        User user = userRepository.findByAuth0Id(auth0Id)
+                .orElseGet(() -> userRepository.findByUsername(email).orElse(null));
 
         Set<Role> newRoles = getRolesFromNames(newRoleNamesFromAuth0);
-
-        // Lógica: ¿Tiene roles internos?
         boolean hasInternalRole = newRoleNamesFromAuth0.stream()
                 .anyMatch(roleName -> !roleName.equals("ROLE_CLIENT"));
 
-
         if (hasInternalRole) {
-            // Caso TRABAJADOR: Debe existir en la tabla 'users'
-
             if (user == null) {
-                // CREACIÓN INICIAL como trabajador
+                log.info("Provisioning JIT: Creando nuevo trabajador {}", email);
                 user = new User();
                 user.setAuth0Id(auth0Id);
                 user.setUsername(email);
-                user.setPassword(null);
-            }
-
-            // SINCRONIZACIÓN de Roles
-            if (user.getRoles() == null) {
                 user.setRoles(new HashSet<>());
+            } else {
+                user.setAuth0Id(auth0Id); 
             }
-            user.getRoles().clear();
-            user.setRoles(newRoles);
-            user = userRepository.save(user);
 
-            // LIMPIEZA: Eliminamos de 'clients' si fue cliente antes
+            syncRoles(user, newRoles);
+
+            user = userRepository.saveAndFlush(user); 
             handleClientDemotion(auth0Id);
+            return user;
 
         } else {
-            // Caso CLIENTE PURO: No debe existir en 'users'
-
-            // PROVISIÓN: Garantizamos que exista en 'clients'.
             handleClientProvisioning(auth0Id, email);
-
-            // DEMOCIÓN CRÍTICA: Eliminamos de 'users' si existía. (Llama a transacción separada)
             handleUserDemotion(auth0Id);
-
-            // Si es cliente puro, devolvemos null ya que no está en la tabla 'users'
-            user = null;
+            return null;
         }
-
-        return user;
     }
 
-    // El @Transactional de Spring ahora permite usar Propagation
+
+    private void syncRoles(User user, Set<Role> newRoles) {
+        if (user.getRoles() == null) {
+            user.setRoles(new HashSet<>());
+        }
+
+        if (user.getRoles().size() == newRoles.size() && user.getRoles().containsAll(newRoles)) {
+            return;
+        }
+
+        log.info("Sincronizando roles para {}. Antes: {}. Después: {}",
+                user.getUsername(),
+                user.getRoles().stream().map(Role::getName).collect(Collectors.toList()),
+                newRoles.stream().map(Role::getName).collect(Collectors.toList()));
+
+        user.getRoles().clear();
+        user.getRoles().addAll(newRoles);
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handleUserDemotion(String auth0Id) {
-        System.out.println("🚨 Ejecutando handleUserDemotion en NUEVA transacción para Auth0 ID: " + auth0Id);
-
-        Optional<User> existingUser = userRepository.findByAuth0Id(auth0Id);
-        if (existingUser.isPresent()) {
-            User user = existingUser.get();
+        userRepository.findByAuth0Id(auth0Id).ifPresent(user -> {
+            log.warn("Democionando usuario interno {} a cliente.", auth0Id);
             userRepository.delete(user);
-            System.out.println("✅ Trabajador " + auth0Id + " democionado a cliente. Eliminada la entrada de la tabla users.");
-        } else {
-            System.out.println("ℹ️ Usuario Auth0 " + auth0Id + " no encontrado en la tabla users. No se requiere democión.");
-        }
+        });
     }
-
 
     @Transactional
     public void handleClientDemotion(String auth0Id) {
-        Optional<Client> existingClient = clientRepository.findByAuth0Id(auth0Id);
-        if (existingClient.isPresent()) {
-            Client client = existingClient.get();
-            clientRepository.delete(client);
-            System.out.println("Cliente " + auth0Id + " promovido a trabajador. Eliminada la entrada de la tabla clients.");
-        }
+        clientRepository.findByAuth0Id(auth0Id).ifPresent(clientRepository::delete);
     }
 
     private Set<Role> getRolesFromNames(Set<String> roleNames) {
         return roleNames.stream()
-                .map(roleName -> findByRoleName(roleName).orElse(null))
-                .filter(java.util.Objects::nonNull)
+                .map(name -> name.startsWith("ROLE_") ? name : "ROLE_" + name)
+                .map(name -> roleRepository.findByName(name).orElse(null))
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
     }
 
-    public User handleClientProvisioning(String auth0Id, String email) {
-        Optional<Client> existingClient = clientRepository.findByAuth0Id(auth0Id);
-
-        if (existingClient.isPresent()) {
-            System.out.println("Cliente ya existe en la BD. Provisioning JIT exitoso.");
-            return null;
+    public void handleClientProvisioning(String auth0Id, String email) {
+        if (clientRepository.findByAuth0Id(auth0Id).isEmpty()) {
+            Client newClient = new Client();
+            newClient.setAuth0Id(auth0Id);
+            newClient.setEmail(email);
+            newClient.setFullName(email);
+            clientRepository.save(newClient);
         }
-
-        Client newClient = new Client();
-        newClient.setAuth0Id(auth0Id);
-        newClient.setEmail(email);
-        newClient.setFullName(email);
-
-        clientRepository.save(newClient);
-        System.out.println("Nuevo Cliente creado en la BD. Provisioning JIT exitoso.");
-        return null;
-    }
-
-    public User handleUserProvisioning(String auth0Id, String email, Set<String> roleNames) {
-        Optional<User> existingUser = userRepository.findByAuth0Id(auth0Id);
-
-        if (existingUser.isPresent()) {
-            return existingUser.get();
-        }
-
-        User newUser = new User();
-        newUser.setAuth0Id(auth0Id);
-        newUser.setUsername(email);
-        newUser.setPassword(null);
-
-        Set<Role> roles = new HashSet<>();
-        for (String roleName : roleNames) {
-            roleRepository.findByName(roleName).ifPresent(roles::add);
-        }
-
-        if (roles.isEmpty()) {
-            throw new RuntimeException("No se encontraron roles válidos en la BD para el usuario de Auth0.");
-        }
-
-        newUser.setRoles(roles);
-        return userRepository.save(newUser);
     }
 }

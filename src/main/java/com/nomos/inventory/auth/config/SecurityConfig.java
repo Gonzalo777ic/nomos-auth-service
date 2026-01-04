@@ -44,7 +44,6 @@ public class SecurityConfig {
         return authUserDetailsService;
     }
 
-    // Inyectar el Issuer URI y Audience para la validación de JWT (vienen del application.properties)
     @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
     private String issuerUri;
 
@@ -65,27 +64,23 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // NUEVO: Bean para configurar el mapeo de Roles de Auth0
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        // 1. Define un convertidor de autoridades que mapea el claim estándar de scopes/roles
+
         JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
 
-        // 2. Define el nombre del claim personalizado donde Auth0 inyectó los roles
-        // Esto coincide con el prefijo que usaste en la Auth0 Action.
+
         grantedAuthoritiesConverter.setAuthoritiesClaimName("https://nomos.inventory.api/roles");
 
-        // 3. Define un prefijo de autoridad para que Spring Security lo reconozca
-        // (Dejamos el prefijo vacío o en blanco para que Spring no agregue "SCOPE_" o "ROLE_" si no lo queremos)
+
         grantedAuthoritiesConverter.setAuthorityPrefix("");
 
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-        // Asignar el convertidor personalizado de autoridades
+
         jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
         return jwtAuthenticationConverter;
     }
 
-    // NUEVA CADENA DE FILTROS: Maneja la autenticación de Auth0 (Sales Front)
     @Bean
     @Order(2)
     public SecurityFilterChain auth0FilterChain(HttpSecurity http) throws Exception {
@@ -94,13 +89,13 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .securityMatcher("/api/sales/**")
                 .authorizeHttpRequests(auth -> auth
-                        // Ahora, Spring Security buscará "ROLE_CLIENT" en el token gracias al converter.
-                        // Solo permitimos el acceso si tienen el rol de cliente.
+
+
                         .anyRequest().hasAuthority("ROLE_CLIENT")
                 )
-                // Habilitar el Resource Server (Auth0 JWT validation)
+
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
-                        // 🔑 Aplicar el convertidor de claims para que Spring lea el rol del token
+
                         .jwtAuthenticationConverter(jwtAuthenticationConverter())
                 ))
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
@@ -122,10 +117,10 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
-                        // Nueva regla: Solo usuarios con ROLE_ADMIN pueden acceder a esta ruta.
-                        // Usamos hasAuthority porque el rol fue insertado como una autoridad SimpleGrantedAuthority.
+
+
                         .requestMatchers("/api/test/admin").hasAuthority("ROLE_ADMIN")
-                        // El resto de peticiones requieren cualquier usuario autenticado (con o sin rol específico)
+
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -157,7 +152,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(Arrays.asList("http://localhost:8081"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -166,7 +161,7 @@ public class SecurityConfig {
     }
     @Bean
     public JwtDecoder jwtDecoder() {
-        // Usa el Issuer URI configurado para construir el decodificador
+
         return NimbusJwtDecoder.withJwkSetUri(issuerUri + ".well-known/jwks.json").build();
     }
 

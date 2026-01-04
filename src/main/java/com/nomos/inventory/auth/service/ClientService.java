@@ -15,12 +15,9 @@ public class ClientService {
         this.clientRepository = clientRepository;
     }
 
-    /**
-     * Obtiene la lista completa de todos los clientes.
-     */
+
     public List<Client> getAllClients() {
         return clientRepository.findAll();
     }
 
-    // Aquí iría la lógica para el Just-In-Time Provisioning de clientes si fuera necesario.
 }

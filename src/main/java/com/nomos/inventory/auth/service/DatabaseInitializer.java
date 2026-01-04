@@ -1,7 +1,7 @@
 package com.nomos.inventory.auth.service;
 
 import com.nomos.inventory.auth.model.Role;
-import com.nomos.inventory.auth.model.RoleEnum; // 💡 Importar el Enum
+import com.nomos.inventory.auth.model.RoleEnum; 
 import com.nomos.inventory.auth.model.User;
 import com.nomos.inventory.auth.repository.RoleRepository;
 import org.springframework.boot.CommandLineRunner;
@@ -27,18 +27,18 @@ public class DatabaseInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        // ------------------------------------------------------------------------
-        // Paso 1: Sincronizar todos los Roles definidos en el RoleEnum
-        // ------------------------------------------------------------------------
+
+
+
         Arrays.stream(RoleEnum.values()).forEach(roleEnum -> {
             String roleName = roleEnum.name();
             userService.findByRoleName(roleName).ifPresentOrElse(
                     role -> {
-                        // El rol ya existe, no hacemos nada.
-                        // System.out.println("Role '" + roleName + "' already exists.");
+
+
                     },
                     () -> {
-                        // El rol no existe, lo creamos.
+
                         Role newRole = new Role();
                         newRole.setName(roleName);
                         roleRepository.save(newRole);
@@ -47,17 +47,14 @@ public class DatabaseInitializer implements CommandLineRunner {
             );
         });
 
-        // ------------------------------------------------------------------------
-        // Paso 2: Crear o obtener el rol ROLE_ADMIN para asignación
-        // ------------------------------------------------------------------------
-        // Ya que el paso 1 garantiza que existe, solo lo obtenemos.
+
+
+
         Role adminRole = userService.findByRoleName(RoleEnum.ROLE_ADMIN.name())
                 .orElseThrow(() -> new IllegalStateException("Admin role not found after initialization."));
 
 
-        // ------------------------------------------------------------------------
-        // Paso 3: Crear el usuario 'admin' local si no existe
-        // ------------------------------------------------------------------------
+
         if (userService.findByUsername("admin").isEmpty()) {
             User adminUser = new User();
             adminUser.setUsername("admin");

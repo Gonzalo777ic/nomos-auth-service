@@ -29,13 +29,11 @@ public class AuthUserDetailsService implements UserDetailsService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
 
-        // Mapea los roles de la entidad User a objetos GrantedAuthority de Spring Security
         Collection<? extends GrantedAuthority> authorities = user.getRoles().stream()
-                // Asumimos que Role.getName() devuelve el nombre del rol (ej. "ROLE_ADMIN")
+
                 .map(role -> new SimpleGrantedAuthority(role.getName()))
                 .collect(Collectors.toList());
 
-        // LOG para verificar los roles que se cargan de la DB
         if (authorities.isEmpty()) {
             log.warn("El usuario {} no tiene roles asignados en la DB. Asignando ROLE_ADMIN por defecto temporalmente.", username);
             authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_ADMIN"));

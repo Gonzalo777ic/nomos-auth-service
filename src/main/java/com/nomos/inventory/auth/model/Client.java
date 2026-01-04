@@ -25,9 +25,7 @@ public class Client {
     @Column(name = "full_name", nullable = false)
     private String fullName;
 
-    // --- Nuevos campos de facturación y contacto ---
 
-    // NOTA: Es String simple por ahora (ver punto 2)
     @Column(name = "document_type", nullable = true)
     private String documentType;
 
@@ -37,11 +35,9 @@ public class Client {
     @Column(name = "phone", nullable = true)
     private String phone;
 
-    // La dirección puede ser nula si es una venta en tienda física
     @Column(name = "address", nullable = true)
     private String address;
 
-    // Si quieres un flag para indicar si el perfil está completo
-    // @Column(name = "is_profile_complete")
-    // private Boolean isProfileComplete = false;
+
+
 }

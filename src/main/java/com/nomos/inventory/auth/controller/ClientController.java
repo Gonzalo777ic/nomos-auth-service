@@ -1,7 +1,7 @@
 package com.nomos.inventory.auth.controller;
 
 import com.nomos.inventory.auth.model.Client;
-import com.nomos.inventory.auth.model.DocumentType; // 💡 Importar el Enum
+import com.nomos.inventory.auth.model.DocumentType; 
 import com.nomos.inventory.auth.service.ClientService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -41,10 +41,10 @@ public class ClientController {
      *
      * @return ResponseEntity con la lista de DocumentTypeDTO.
      */
-    @GetMapping("/document-types") // <-- Nuevo Endpoint
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_SELLER')") // Permitir a vendedores verlo también
+    @GetMapping("/document-types") 
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_SELLER')") 
     public ResponseEntity<List<DocumentTypeDTO>> getDocumentTypes() {
-        // Mapear los valores del enum a una lista de DTOs
+
         List<DocumentTypeDTO> dtos = Arrays.stream(DocumentType.values())
                 .map(dt -> new DocumentTypeDTO(dt.name(), dt.getDescription()))
                 .collect(Collectors.toList());

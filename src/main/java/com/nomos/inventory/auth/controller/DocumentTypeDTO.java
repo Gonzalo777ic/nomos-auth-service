@@ -9,7 +9,6 @@ public class DocumentTypeDTO {
         this.description = description;
     }
 
-    // Getters (necesarios para que Jackson los serialice a JSON)
     public String getKey() {
         return key;
     }

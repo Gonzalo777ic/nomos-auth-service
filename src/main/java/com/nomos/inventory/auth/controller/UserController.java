@@ -5,9 +5,7 @@ import com.nomos.inventory.auth.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,50 +15,52 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UserController {
 
-
-
     private final UserService userService;
 
-
+    /**
+     * DTO para la gestión de usuarios internos.
+     *  CORRECCIÓN: Se añadió el campo 'supplierId' para que el Frontend
+     * pueda filtrar los usuarios vinculados a cada proveedor.
+     */
     public static class InternalUserDTO {
         public Long id;
-        public String username; // Mapea el campo 'username'
+        public String username;
         public String auth0Id;
-        public List<String> roles; // ¡NUEVO CAMPO!
+        public List<String> roles;
+        public Long supplierId; 
 
         public InternalUserDTO(User user) {
             this.id = user.getId();
             this.username = user.getUsername();
             this.auth0Id = user.getAuth0Id();
-            // Mapeamos el Set<Role> a List<String>
+            this.supplierId = user.getSupplierId(); 
             this.roles = user.getRoles().stream()
                     .map(role -> role.getName())
                     .collect(Collectors.toList());
         }
     }
 
-
-    // DTO simple para enviar al frontend
+    /**
+     * DTO simple para referencias rápidas (ej: selectores de vendedores).
+     */
     public static class UserReferenceDTO {
         public Long id;
-        public String name; // Nombre o email para mostrar
+        public String name;
 
         public UserReferenceDTO(User user) {
             this.id = user.getId();
-            // Usamos 'username' (que es el email) si no tienes 'fullName' en el modelo User.
             this.name = user.getUsername();
         }
     }
 
     /**
      * Endpoint: GET /api/auth/users/sellers
-     * Obtiene usuarios que tienen el rol de vendedor (actualmente ROLE_ADMIN o ROLE_SELLER).
+     * Obtiene usuarios con roles de venta/administración.
      */
     @GetMapping("/sellers")
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_VENTAS', 'SCOPE_read:users')")
     public ResponseEntity<List<UserReferenceDTO>> getAllSellers() {
 
-        // 🏆 CORRECCIÓN CLAVE: Usar el método que devuelve List<User>
         List<User> sellers = userService.findUsersByRoleName("ROLE_ADMIN");
 
         List<UserReferenceDTO> dtoList = sellers.stream()
@@ -70,18 +70,37 @@ public class UserController {
         return ResponseEntity.ok(dtoList);
     }
 
-    // 🏆 2. NUEVO ENDPOINT: Gestión de Usuarios Internos (CRUD para el Frontend)
+    /**
+     * Endpoint: GET /api/auth/users/internal
+     * Devuelve la lista completa de trabajadores con sus roles y vinculación a proveedores.
+     */
     @GetMapping("/internal")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<List<InternalUserDTO>> getAllInternalUsers() { // 💡 Cambiamos el tipo de retorno
+    public ResponseEntity<List<InternalUserDTO>> getAllInternalUsers() {
         List<User> internalUsers = userService.findAllInternalUsers();
 
         List<InternalUserDTO> dtoList = internalUsers.stream()
-                .map(InternalUserDTO::new) // 💡 Mapea al InternalUserDTO
+                .map(InternalUserDTO::new)
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtoList);
     }
 
+    /**
+     * Endpoint: PATCH /api/auth/users/{id}/supplier
+     * Permite vincular o desvincular (si supplierId es null) un usuario a una empresa proveedora.
+     */
+    @PatchMapping("/{id}/supplier")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> updateSupplierAssignment(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long supplierId) {
 
+        try {
+            userService.updateSupplierId(id, supplierId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }
