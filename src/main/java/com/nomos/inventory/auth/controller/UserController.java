@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -103,4 +104,19 @@ public class UserController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+    @GetMapping("/info/{identifier}")
+    public ResponseEntity<InternalUserDTO> getUserInfo(@PathVariable String identifier) {
+
+        Optional<User> userOpt = userService.findByAuth0Id(identifier);
+
+        if (userOpt.isEmpty()) {
+            userOpt = userService.findByUsername(identifier);
+        }
+
+        return userOpt
+                .map(InternalUserDTO::new)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
 }

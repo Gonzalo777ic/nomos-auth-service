@@ -25,7 +25,6 @@ public class Client {
     @Column(name = "full_name", nullable = false)
     private String fullName;
 
-
     @Column(name = "document_type", nullable = true)
     private String documentType;
 

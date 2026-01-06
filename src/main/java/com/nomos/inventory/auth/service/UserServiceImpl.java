@@ -179,4 +179,9 @@ public class UserServiceImpl implements UserService {
             clientRepository.save(newClient);
         }
     }
+
+    @Override
+    public Optional<User> findByAuth0Id(String auth0Id) {
+        return userRepository.findByAuth0Id(auth0Id);
+    }
 }

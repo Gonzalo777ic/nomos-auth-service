@@ -16,6 +16,6 @@ public interface UserService {
     List<User> findAllInternalUsers();
 
     void updateSupplierId(Long userId, Long supplierId);
-
+    Optional<User> findByAuth0Id(String auth0Id);
     User findOrCreateAuth0User(String auth0Id, String email, Set<String> newRoleNamesFromAuth0);
 }
