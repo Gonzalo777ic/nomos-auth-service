@@ -24,7 +24,7 @@ public class ClientController {
     }
 
     /**
-     * 🌐 GET /api/auth/clients
+     *  GET /api/auth/clients
      * Obtiene una lista de todos los clientes registrados.
      */
     @GetMapping
@@ -35,7 +35,7 @@ public class ClientController {
     }
 
     /**
-     * 🌐 GET /api/auth/clients/document-types
+     *  GET /api/auth/clients/document-types
      * Expone los valores del Enum DocumentType para ser usados en el frontend.
      * Se usa un DTO para enviar el nombre del enum (KEY) y su descripción.
      *
