@@ -28,13 +28,11 @@ public class UserController {
         public String username;
         public String auth0Id;
         public List<String> roles;
-        public Long supplierId; 
 
         public InternalUserDTO(User user) {
             this.id = user.getId();
             this.username = user.getUsername();
             this.auth0Id = user.getAuth0Id();
-            this.supplierId = user.getSupplierId(); 
             this.roles = user.getRoles().stream()
                     .map(role -> role.getName())
                     .collect(Collectors.toList());
@@ -87,23 +85,6 @@ public class UserController {
         return ResponseEntity.ok(dtoList);
     }
 
-    /**
-     * Endpoint: PATCH /api/auth/users/{id}/supplier
-     * Permite vincular o desvincular (si supplierId es null) un usuario a una empresa proveedora.
-     */
-    @PatchMapping("/{id}/supplier")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<?> updateSupplierAssignment(
-            @PathVariable Long id,
-            @RequestParam(required = false) Long supplierId) {
-
-        try {
-            userService.updateSupplierId(id, supplierId);
-            return ResponseEntity.ok().build();
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
     @GetMapping("/info/{identifier}")
     public ResponseEntity<InternalUserDTO> getUserInfo(@PathVariable String identifier) {
 

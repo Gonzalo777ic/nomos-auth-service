@@ -1,5 +1,6 @@
 package com.nomos.inventory.auth.model;
 
+import com.valeerp.kernel.SoftDeletable;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -11,7 +12,7 @@ import java.util.Set;
 @Getter
 @Setter
 @NoArgsConstructor
-public class User {
+public class User extends SoftDeletable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -25,10 +26,6 @@ public class User {
 
     @Column(nullable = true)
     private String password;
-
-
-    @Column(name = "supplier_id", nullable = true)
-    private Long supplierId;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(

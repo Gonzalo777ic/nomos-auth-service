@@ -3,7 +3,9 @@ package com.nomos.inventory.auth.controller;
 import com.nomos.inventory.auth.model.Client;
 import com.nomos.inventory.auth.model.DocumentType; 
 import com.nomos.inventory.auth.service.ClientService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,8 +32,8 @@ public class ClientController {
     @GetMapping
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<List<Client>> getAllClients() {
-        List<Client> clients = clientService.getAllClients();
-        return ResponseEntity.ok(clients);
+        throw new ResponseStatusException(HttpStatus.GONE,
+                "La ficha del cliente pertenece al contexto comercial: /api/customers");
     }
 
     /**

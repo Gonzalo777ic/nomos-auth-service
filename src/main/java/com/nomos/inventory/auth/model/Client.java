@@ -1,5 +1,6 @@
 package com.nomos.inventory.auth.model;
 
+import com.valeerp.kernel.SoftDeletable;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -10,7 +11,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Client {
+public class Client extends SoftDeletable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
+import com.valeerp.kernel.Actors;
+
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -85,18 +88,6 @@ public class UserServiceImpl implements UserService {
     }
     @Override
     @Transactional
-    public void updateSupplierId(Long userId, Long supplierId) {
-        userRepository.findById(userId).ifPresentOrElse(user -> {
-            log.info("Asignando proveedor ID {} al usuario {}", supplierId, user.getUsername());
-            user.setSupplierId(supplierId);
-            userRepository.save(user);
-        }, () -> {
-            throw new RuntimeException("No se pudo encontrar el usuario con ID: " + userId);
-        });
-    }
-
-    @Override
-    @Transactional
     public User findOrCreateAuth0User(String auth0Id, String email, Set<String> newRoleNamesFromAuth0) {
 
         User user = userRepository.findByAuth0Id(auth0Id)
@@ -152,14 +143,18 @@ public class UserServiceImpl implements UserService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handleUserDemotion(String auth0Id) {
         userRepository.findByAuth0Id(auth0Id).ifPresent(user -> {
-            log.warn("Democionando usuario interno {} a cliente.", auth0Id);
-            userRepository.delete(user);
+            log.warn("Dando de baja la cuenta interna {}.", auth0Id);
+            user.retire(Actors.current(), Instant.now());
+            userRepository.save(user);
         });
     }
 
     @Transactional
     public void handleClientDemotion(String auth0Id) {
-        clientRepository.findByAuth0Id(auth0Id).ifPresent(clientRepository::delete);
+        clientRepository.findByAuth0Id(auth0Id).ifPresent(client -> {
+            client.retire(Actors.current(), Instant.now());
+            clientRepository.save(client);
+        });
     }
 
     private Set<Role> getRolesFromNames(Set<String> roleNames) {
@@ -171,13 +166,7 @@ public class UserServiceImpl implements UserService {
     }
 
     public void handleClientProvisioning(String auth0Id, String email) {
-        if (clientRepository.findByAuth0Id(auth0Id).isEmpty()) {
-            Client newClient = new Client();
-            newClient.setAuth0Id(auth0Id);
-            newClient.setEmail(email);
-            newClient.setFullName(email);
-            clientRepository.save(newClient);
-        }
+        log.info("La ficha comercial de {} se registra en el contexto de clientes, no en identidad", email);
     }
 
     @Override
