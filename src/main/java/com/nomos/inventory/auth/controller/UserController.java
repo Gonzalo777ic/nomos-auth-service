@@ -1,16 +1,22 @@
 package com.nomos.inventory.auth.controller;
 
+import com.nomos.inventory.auth.acl.dto.UserResponse;
 import com.nomos.inventory.auth.model.User;
 import com.nomos.inventory.auth.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
+/**
+ * Consultas legacy de usuarios internos. Solo DTOs; sin supplierId ni ficha comercial.
+ */
 @RestController
 @RequestMapping("/api/auth/users")
 @RequiredArgsConstructor
@@ -18,30 +24,6 @@ public class UserController {
 
     private final UserService userService;
 
-    /**
-     * DTO para la gestión de usuarios internos.
-     *  CORRECCIÓN: Se añadió el campo 'supplierId' para que el Frontend
-     * pueda filtrar los usuarios vinculados a cada proveedor.
-     */
-    public static class InternalUserDTO {
-        public Long id;
-        public String username;
-        public String auth0Id;
-        public List<String> roles;
-
-        public InternalUserDTO(User user) {
-            this.id = user.getId();
-            this.username = user.getUsername();
-            this.auth0Id = user.getAuth0Id();
-            this.roles = user.getRoles().stream()
-                    .map(role -> role.getName())
-                    .collect(Collectors.toList());
-        }
-    }
-
-    /**
-     * DTO simple para referencias rápidas (ej: selectores de vendedores).
-     */
     public static class UserReferenceDTO {
         public Long id;
         public String name;
@@ -52,52 +34,32 @@ public class UserController {
         }
     }
 
-    /**
-     * Endpoint: GET /api/auth/users/sellers
-     * Obtiene usuarios con roles de venta/administración.
-     */
     @GetMapping("/sellers")
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_VENTAS', 'SCOPE_read:users')")
     public ResponseEntity<List<UserReferenceDTO>> getAllSellers() {
-
         List<User> sellers = userService.findUsersByRoleName("ROLE_ADMIN");
-
-        List<UserReferenceDTO> dtoList = sellers.stream()
-                .map(UserReferenceDTO::new)
-                .collect(Collectors.toList());
-
+        List<UserReferenceDTO> dtoList = sellers.stream().map(UserReferenceDTO::new).toList();
         return ResponseEntity.ok(dtoList);
     }
 
-    /**
-     * Endpoint: GET /api/auth/users/internal
-     * Devuelve la lista completa de trabajadores con sus roles y vinculación a proveedores.
-     */
     @GetMapping("/internal")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<List<InternalUserDTO>> getAllInternalUsers() {
-        List<User> internalUsers = userService.findAllInternalUsers();
-
-        List<InternalUserDTO> dtoList = internalUsers.stream()
-                .map(InternalUserDTO::new)
-                .collect(Collectors.toList());
-
+    public ResponseEntity<List<UserResponse>> getAllInternalUsers() {
+        List<UserResponse> dtoList = userService.findAllInternalUsers().stream()
+                .map(UserResponse::from)
+                .toList();
         return ResponseEntity.ok(dtoList);
     }
 
     @GetMapping("/info/{identifier}")
-    public ResponseEntity<InternalUserDTO> getUserInfo(@PathVariable String identifier) {
-
+    public ResponseEntity<UserResponse> getUserInfo(@PathVariable String identifier) {
         Optional<User> userOpt = userService.findByAuth0Id(identifier);
-
         if (userOpt.isEmpty()) {
             userOpt = userService.findByUsername(identifier);
         }
-
         return userOpt
-                .map(InternalUserDTO::new)
+                .map(UserResponse::from)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
-
 }

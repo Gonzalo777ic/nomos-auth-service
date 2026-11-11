@@ -15,16 +15,16 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+
 import java.io.IOException;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.HashSet;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
 public class JwtRequestFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtRequestFilter.class);
-
 
     private final JwtUtil jwtUtil;
 
@@ -42,32 +42,23 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             try {
                 username = jwtUtil.extractUsername(jwt);
             } catch (Exception e) {
-
                 log.warn("Error al parsear el token JWT: {}", e.getMessage());
-
             }
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
             if (jwtUtil.validateToken(jwt, username)) {
+                Set<GrantedAuthority> authorities = new HashSet<>();
+                jwtUtil.extractRoles(jwt).forEach(role ->
+                        authorities.add(new SimpleGrantedAuthority(role)));
+                jwtUtil.extractPermissions(jwt).forEach(permission ->
+                        authorities.add(new SimpleGrantedAuthority(permission)));
 
-                List<String> roles = jwtUtil.extractRoles(jwt);
+                log.debug("Token válido para {}. Authorities: {}", username, authorities);
 
-                List<GrantedAuthority> authorities = roles.stream()
-                        .map(SimpleGrantedAuthority::new)
-                        .collect(Collectors.toList());
-
-                log.debug("Token válido para usuario {}. Roles asignados al contexto: {}", username, authorities);
-
-
-                UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                        username, 
-                        null,     
-                        authorities);
-
+                UsernamePasswordAuthenticationToken authenticationToken =
+                        new UsernamePasswordAuthenticationToken(username, null, authorities);
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
             } else {
                 log.debug("Token JWT inválido para el usuario {}", username);

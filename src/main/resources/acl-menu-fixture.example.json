@@ -1,0 +1,58 @@
+{
+  "description": "Forma de claim/fixture para visibilidad de menús en Admin ERP. Misma forma que GET /api/auth/acl/access y claims JWT (valeerp.acl.*-claim).",
+  "claimNames": {
+    "roles": "roles",
+    "permissions": "permissions",
+    "groups": "groups",
+    "menus": "menus"
+  },
+  "accessSnapshot": {
+    "username": "admin@valeerp.local",
+    "roles": ["ROLE_ADMIN"],
+    "groups": ["group_system"],
+    "permissions": [
+      "identity.user.read",
+      "identity.user.write",
+      "identity.role.read",
+      "identity.security_group.read",
+      "identity.menu.read",
+      "identity.session.read",
+      "identity.company.read",
+      "catalog.product.read",
+      "inventory.stock.read",
+      "purchase.order.read",
+      "sales.order.read",
+      "accounting.entry.read"
+    ],
+    "menus": [
+      {
+        "key": "menu.identity",
+        "label": "Identidad",
+        "parentKey": null,
+        "route": "/identity",
+        "requiredPermission": null,
+        "requiredGroup": "group_system",
+        "sortOrder": 10
+      },
+      {
+        "key": "menu.identity.users",
+        "label": "Usuarios",
+        "parentKey": "menu.identity",
+        "route": "/identity/users",
+        "requiredPermission": "identity.user.read",
+        "requiredGroup": null,
+        "sortOrder": 11
+      },
+      {
+        "key": "menu.catalog",
+        "label": "Catálogo",
+        "parentKey": null,
+        "route": "/catalog",
+        "requiredPermission": "catalog.product.read",
+        "requiredGroup": null,
+        "sortOrder": 20
+      }
+    ]
+  },
+  "visibilityRule": "Un menú es visible si (requiredPermission ∈ permissions) OR (requiredGroup ∈ groups). Si ambos son null, visible para autenticados. Si ambos están definidos, basta uno."
+}

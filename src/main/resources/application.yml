@@ -1,0 +1,19 @@
+# Defaults de dominio sin secretos. Credenciales DB/JWT van en application.properties (gitignored).
+valeerp:
+  company:
+    default-currency: PEN
+    default-time-zone: AMERICA_LIMA
+    default-membership-role: MEMBER
+  acl:
+    roles-claim: roles
+    permissions-claim: permissions
+    groups-claim: groups
+    menus-claim: menus
+  hr:
+    default-wage-currency: PEN
+    default-contract-type: INDEFINITE
+    default-absence-type: VACATION
+  # Impersonación: deshabilitada por defecto (fuente de verdad de política).
+  # Override: valeerp.impersonation.enabled=true o VALEERP_IMPERSONATION_ENABLED=true
+  impersonation:
+    enabled: false

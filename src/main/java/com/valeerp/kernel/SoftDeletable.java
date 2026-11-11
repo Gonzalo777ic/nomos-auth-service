@@ -17,6 +17,11 @@ public abstract class SoftDeletable {
     @Column(name = "deleted_by", length = 120)
     private String deletedBy;
 
+    public void restore() {
+        this.deletedAt = null;
+        this.deletedBy = null;
+    }
+
     public void retire(String actor, Instant when) {
         if (this.deletedAt != null) {
             throw new DomainException("El registro ya fue dado de baja");

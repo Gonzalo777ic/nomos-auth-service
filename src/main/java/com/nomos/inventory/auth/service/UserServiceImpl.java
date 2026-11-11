@@ -2,27 +2,31 @@ package com.nomos.inventory.auth.service;
 
 import com.nomos.inventory.auth.model.Role;
 import com.nomos.inventory.auth.model.User;
+import com.nomos.inventory.auth.repository.ClientRepository;
 import com.nomos.inventory.auth.repository.RoleRepository;
 import com.nomos.inventory.auth.repository.UserRepository;
-import com.nomos.inventory.auth.repository.ClientRepository;
-import com.nomos.inventory.auth.model.Client;
+import com.valeerp.kernel.Actors;
+import com.valeerp.kernel.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
-
-import com.valeerp.kernel.Actors;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 @Transactional
 @RequiredArgsConstructor
-@Slf4j 
+@Slf4j
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
@@ -33,7 +37,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public User saveUser(User user) {
         if (user.getPassword() != null && !user.getPassword().startsWith("$2a$")) {
-            user.setPassword(passwordEncoder.encode(user.getPassword()));
+            user.changePassword(passwordEncoder.encode(user.getPassword()));
         }
         return userRepository.save(user);
     }
@@ -50,13 +54,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void addRoleToUser(String username, String roleName) {
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
-        Role role = roleRepository.findByName(roleName).orElseThrow(() -> new RuntimeException("Role not found"));
-
-        if (user.getRoles() == null) {
-            user.setRoles(new HashSet<>());
-        }
-        user.getRoles().add(role);
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new DomainException("Usuario no encontrado"));
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new DomainException("Rol no encontrado"));
+        user.assignRole(role);
         userRepository.save(user);
     }
 
@@ -76,22 +78,27 @@ public class UserServiceImpl implements UserService {
     public List<User> findAllInternalUsers() {
         Role clientRole = roleRepository.findByName("ROLE_CLIENT").orElse(null);
         List<User> allUsers = userRepository.findAll();
-        if (clientRole == null) return allUsers;
-
+        if (clientRole == null) {
+            return allUsers;
+        }
         return allUsers.stream()
                 .filter(user -> {
                     Set<Role> roles = user.getRoles();
-                    if (roles == null || roles.isEmpty()) return true;
+                    if (roles == null || roles.isEmpty()) {
+                        return true;
+                    }
                     return !(roles.size() == 1 && roles.contains(clientRole));
                 })
                 .collect(Collectors.toList());
     }
+
     @Override
     @Transactional
     public User findOrCreateAuth0User(String auth0Id, String email, Set<String> newRoleNamesFromAuth0) {
-
         User user = userRepository.findByAuth0Id(auth0Id)
-                .orElseGet(() -> userRepository.findByUsername(email).orElse(null));
+                .orElseGet(() -> userRepository.findByUsername(email)
+                        .or(() -> userRepository.findByEmail(email))
+                        .orElse(null));
 
         Set<Role> newRoles = getRolesFromNames(newRoleNamesFromAuth0);
         boolean hasInternalRole = newRoleNamesFromAuth0.stream()
@@ -100,44 +107,29 @@ public class UserServiceImpl implements UserService {
         if (hasInternalRole) {
             if (user == null) {
                 log.info("Provisioning JIT: Creando nuevo trabajador {}", email);
-                user = new User();
-                user.setAuth0Id(auth0Id);
-                user.setUsername(email);
-                user.setRoles(new HashSet<>());
+                user = User.registerAuth0(auth0Id, email);
             } else {
-                user.setAuth0Id(auth0Id); 
+                user.bindAuth0Id(auth0Id);
             }
-
             syncRoles(user, newRoles);
-
-            user = userRepository.saveAndFlush(user); 
+            user = userRepository.saveAndFlush(user);
             handleClientDemotion(auth0Id);
             return user;
-
-        } else {
-            handleClientProvisioning(auth0Id, email);
-            handleUserDemotion(auth0Id);
-            return null;
         }
+        handleClientProvisioning(auth0Id, email);
+        handleUserDemotion(auth0Id);
+        return null;
     }
 
-
     private void syncRoles(User user, Set<Role> newRoles) {
-        if (user.getRoles() == null) {
-            user.setRoles(new HashSet<>());
-        }
-
         if (user.getRoles().size() == newRoles.size() && user.getRoles().containsAll(newRoles)) {
             return;
         }
-
         log.info("Sincronizando roles para {}. Antes: {}. Después: {}",
                 user.getUsername(),
                 user.getRoles().stream().map(Role::getName).collect(Collectors.toList()),
                 newRoles.stream().map(Role::getName).collect(Collectors.toList()));
-
-        user.getRoles().clear();
-        user.getRoles().addAll(newRoles);
+        user.replaceRoles(newRoles);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -162,7 +154,7 @@ public class UserServiceImpl implements UserService {
                 .map(name -> name.startsWith("ROLE_") ? name : "ROLE_" + name)
                 .map(name -> roleRepository.findByName(name).orElse(null))
                 .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     public void handleClientProvisioning(String auth0Id, String email) {

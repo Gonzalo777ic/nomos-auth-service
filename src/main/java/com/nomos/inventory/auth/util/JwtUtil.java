@@ -1,5 +1,6 @@
 package com.nomos.inventory.auth.util;
 
+import com.nomos.inventory.auth.acl.AclProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.Jwts;
@@ -24,10 +25,18 @@ public class JwtUtil {
 
     private static final Logger log = LoggerFactory.getLogger(JwtUtil.class);
 
-    private final Key key = Keys.hmacShaKeyFor("miClaveSecretaQueEsMuyLargaYSeguraParaUsarEnProduccion1234567890".getBytes(StandardCharsets.UTF_8));
+    private final Key key = Keys.hmacShaKeyFor(
+            "miClaveSecretaQueEsMuyLargaYSeguraParaUsarEnProduccion1234567890".getBytes(StandardCharsets.UTF_8)
+    );
+
+    private final AclProperties aclProperties;
 
     @Value("${jwt.expiration}")
     private Long expiration;
+
+    public JwtUtil(AclProperties aclProperties) {
+        this.aclProperties = aclProperties;
+    }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
@@ -38,13 +47,23 @@ public class JwtUtil {
     }
 
     public List<String> extractRoles(String token) {
+        return extractStringListClaim(token, aclProperties.getRolesClaim());
+    }
 
+    public List<String> extractPermissions(String token) {
+        return extractStringListClaim(token, aclProperties.getPermissionsClaim());
+    }
 
-        List<?> rolesObject = extractAllClaims(token).get("roles", List.class);
-        if (rolesObject == null) {
+    public List<String> extractGroups(String token) {
+        return extractStringListClaim(token, aclProperties.getGroupsClaim());
+    }
+
+    private List<String> extractStringListClaim(String token, String claimName) {
+        List<?> values = extractAllClaims(token).get(claimName, List.class);
+        if (values == null) {
             return Collections.emptyList();
         }
-        return rolesObject.stream()
+        return values.stream()
                 .filter(String.class::isInstance)
                 .map(String.class::cast)
                 .collect(Collectors.toList());
@@ -68,16 +87,30 @@ public class JwtUtil {
     }
 
     public String generateToken(String username, Collection<? extends GrantedAuthority> authorities) {
+        return generateToken(username, authorities, List.of(), List.of(), List.of());
+    }
 
+    public String generateToken(
+            String username,
+            Collection<? extends GrantedAuthority> authorities,
+            List<String> permissions,
+            List<String> groups,
+            List<String> menuKeys
+    ) {
         List<String> roleNames = authorities.stream()
                 .map(GrantedAuthority::getAuthority)
+                .filter(authority -> authority.startsWith("ROLE_"))
                 .collect(Collectors.toList());
 
-        log.info("Generando token JWT para usuario: {} con roles: {}", username, roleNames);
+        log.info("Generando token JWT para usuario: {} con roles: {} permisos: {}",
+                username, roleNames, permissions);
 
         return Jwts.builder()
                 .setSubject(username)
-                .claim("roles", roleNames) 
+                .claim(aclProperties.getRolesClaim(), roleNames)
+                .claim(aclProperties.getPermissionsClaim(), permissions == null ? List.of() : permissions)
+                .claim(aclProperties.getGroupsClaim(), groups == null ? List.of() : groups)
+                .claim(aclProperties.getMenusClaim(), menuKeys == null ? List.of() : menuKeys)
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(key)

@@ -11,6 +11,7 @@ import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -33,6 +34,7 @@ import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -48,9 +50,9 @@ public class SecurityConfig {
     private String issuerUri;
 
     /**
-     * Cadena de filtros de seguridad para endpoints públicos.
-     * Esta cadena tiene la menor prioridad (Order(1)), por lo que se ejecuta primero.
-     * Permite el acceso sin autenticación a la ruta /api/auth/**.
+     * Solo login/registro/upsert públicos.
+     * El resto de /api/auth/** (ACL, users, sessions) pasa por la cadena protegida + JWT
+     * para que {@code @PreAuthorize} y menús visibles respeten el token.
      */
     @Bean
     @Order(1)
@@ -58,7 +60,11 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
-                .securityMatcher("/api/auth/**")
+                .securityMatcher(
+                        "/api/auth/login",
+                        "/api/auth/register",
+                        "/api/auth/auth0-upsert"
+                )
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
 
         return http.build();

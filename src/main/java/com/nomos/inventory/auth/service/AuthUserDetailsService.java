@@ -12,9 +12,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.stream.Collectors;
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -27,23 +26,24 @@ public class AuthUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = userRepository.findByUsername(username)
+                .or(() -> userRepository.findByEmail(username))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
 
-        Collection<? extends GrantedAuthority> authorities = user.getRoles().stream()
-
-                .map(role -> new SimpleGrantedAuthority(role.getName()))
-                .collect(Collectors.toList());
+        Set<GrantedAuthority> authorities = new HashSet<>();
+        user.getRoles().forEach(role -> authorities.add(new SimpleGrantedAuthority(role.getName())));
+        user.effectivePermissionCodes()
+                .forEach(code -> authorities.add(new SimpleGrantedAuthority(code)));
 
         if (authorities.isEmpty()) {
-            log.warn("El usuario {} no tiene roles asignados en la DB. Asignando ROLE_ADMIN por defecto temporalmente.", username);
-            authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_ADMIN"));
+            log.warn("El usuario {} no tiene roles ni permisos asignados.", username);
         } else {
-            log.info("Roles cargados para el usuario {}: {}", username, authorities);
+            log.info("Authorities cargadas para {}: {}", username, authorities);
         }
 
+        String password = user.getPassword() == null ? "" : user.getPassword();
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
-                user.getPassword(),
+                password,
                 authorities
         );
     }
