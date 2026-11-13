@@ -8,11 +8,11 @@
         <version>3.5.5</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.nomos.inventory</groupId>
-    <artifactId>nomos-auth-service</artifactId>
+    <groupId>com.valeerp</groupId>
+    <artifactId>valeerp-identity</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>nomos-auth-service</name>
-    <description>nomos-auth-service</description>
+    <name>ValeERP Identity</name>
+    <description>Identidad, sesión y acceso de ValeERP</description>
     <url/>
     <licenses>
         <license/>

@@ -136,7 +136,7 @@ Cada modelo vive en un solo contexto. Un concepto con dos entidades en dos servi
 
 ````md
 ---
-description: Modelo táctico DDD, agregados e invariantes de Nomos
+description: Modelo táctico DDD, agregados e invariantes de ValeERP
 globs: "**/*.java"
 alwaysApply: false
 ---
@@ -176,7 +176,7 @@ purchaseOrder.receive(receipt);
 ````md
 ---
 description: Composición visual del ERP. El color solo vive en tokens, no en las pantallas
-globs: nomos-inventory-system-frontend/**/*.{tsx,css}
+globs: valeerp-erp/**/*.{tsx,css}
 alwaysApply: false
 ---
 

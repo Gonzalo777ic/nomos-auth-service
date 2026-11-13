@@ -1,6 +1,6 @@
 package com.valeerp.hr;
 
-import com.nomos.inventory.auth.repository.UserRepository;
+import com.valeerp.inventory.auth.repository.UserRepository;
 import com.valeerp.hr.dto.CreateEmployeeRequest;
 import com.valeerp.hr.dto.EmployeeResponse;
 import com.valeerp.hr.dto.LinkEmployeeUserRequest;
